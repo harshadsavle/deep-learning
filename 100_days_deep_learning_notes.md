@@ -2576,3 +2576,2178 @@ Mini-Batch:   Slightly noisy ↘↗↘↘↗↘
 
 ---
 
+# Section 5: Advanced Optimizers (Videos 32-38)
+
+## Video 32: Introduction to Optimizers
+
+### Optimizer Ka Role
+- Neural network train karne ke liye **weight updates** chahiye
+- Optimizer ka kaam: Optimal weights find karna jisse **loss minimum** ho
+- Basic formula: `W_new = W_old - learning_rate × gradient`
+
+### Gradient Descent Ke Problems
+1. **Learning Rate Selection:** Bahut difficult hai sahi value choose karna
+   - Too small → Very slow convergence
+   - Too large → Overshooting, unstable training
+   
+2. **Learning Rate Scheduling:** 
+   - Pre-defined schedule → Data ke according adapt nahi karta
+   
+3. **Same Learning Rate For All Parameters:**
+   - Har direction mein same speed se move karna optimal nahi
+   
+4. **Local Minima Problem:**
+   - Gradient descent local minimum mein fas sakta hai
+   
+5. **Saddle Points:**
+   - Flat regions jahan gradient ~0, training stuck ho jaata hai
+
+### Optimizers Jo Hum Padhenge
+1. Momentum
+2. NAG (Nesterov Accelerated Gradient)
+3. AdaGrad
+4. RMSProp
+5. Adam (Most Popular!)
+
+---
+
+## Video 33: Exponentially Weighted Moving Average (EWMA)
+
+### EWMA Kya Hai?
+- Time series data mein **trend** find karne ki technique
+- Recent values ko **zyada weight** deta hai
+- Purani values ki importance **exponentially decay** hoti hai
+
+### Mathematical Formula
+```
+V_t = β × V_{t-1} + (1-β) × θ_t
+```
+- **V_t:** Current EWMA value
+- **β:** Decay factor (0 to 1), typically 0.9
+- **θ_t:** Current data point
+
+### β Ka Effect
+| β Value | Behavior | Interpretation |
+|---------|----------|----------------|
+| 0.9 | Smooth curve | Average of ~10 previous values |
+| 0.5 | More responsive | Average of ~2 previous values |
+| 0.98 | Very smooth | Average of ~50 previous values |
+
+### Key Insight
+- **Higher β:** Zyada past ko consider karta hai, smoother curve
+- **Lower β:** Recent values ko zyada importance, more reactive
+
+### Python Implementation
+```python
+import pandas as pd
+
+# EWMA using pandas
+df['ewma'] = df['temperature'].ewm(alpha=0.1).mean()  # alpha = 1 - β
+```
+
+### EWMA In Deep Learning
+- Yeh concept **Momentum** aur **Adam** optimizers mein use hota hai
+- Past gradients ka "memory" maintain karta hai
+
+---
+
+## Video 34: SGD with Momentum
+
+### Momentum Ka Core Idea
+- **Physical Analogy:** Ball rolling down a hill gains momentum
+- Agar consecutive gradients same direction mein hain → **speed badh jaati hai**
+- Conflicting gradients → **speed kam ho jaati hai**
+
+### Problem Ye Solve Karta Hai
+1. **Slow convergence** when gradient is consistent but small
+2. **High curvature** regions jahan zigzag movement hoti hai
+3. **Local minima** se escape kar sakta hai (due to momentum)
+
+### Mathematical Formulation
+
+**Vanilla Gradient Descent:**
+```
+W_new = W_old - η × ∇L
+```
+
+**SGD with Momentum:**
+```
+V_t = β × V_{t-1} + η × ∇L
+W_new = W_old - V_t
+```
+
+Where:
+- **V_t:** Velocity at time t (maintains history)
+- **β:** Momentum coefficient (typically 0.9)
+- **η:** Learning rate
+
+### β Ka Role
+| β Value | Effect |
+|---------|--------|
+| 0 | Same as vanilla SGD (no momentum) |
+| 0.9 | Good balance, remembers ~10 past gradients |
+| ~1 | Too much momentum, may overshoot |
+
+### Visualization
+```
+Vanilla SGD:    ↙ ↘ ↙ ↘ ↙ (zigzag path)
+With Momentum:  ↘ ↘ ↘ → (smoother, faster path)
+```
+
+### Advantages
+1. **Faster convergence** - Speed builds up in consistent direction
+2. **Escapes local minima** - Momentum helps jump out
+3. **Smoother path** - Reduces oscillations
+
+### Disadvantage
+- **Overshooting:** Ball may cross the minimum and oscillate before settling
+- This is why we have NAG (Nesterov) which improves on this
+
+### Keras Implementation
+```python
+from tensorflow.keras.optimizers import SGD
+
+optimizer = SGD(learning_rate=0.01, momentum=0.9)
+model.compile(optimizer=optimizer, loss='mse')
+```
+
+---
+
+## Video 35: Nesterov Accelerated Gradient (NAG)
+
+### NAG Ka Core Idea
+- Momentum ka improvement: **"Look ahead"** before taking step
+- Pehle dekho ki momentum tumhe kahan le jaayega, phir gradient calculate karo
+
+### Momentum vs NAG
+**Momentum:**
+1. Calculate gradient at current position
+2. Take step using momentum + gradient
+
+**NAG:**
+1. Take a partial step in momentum direction (look ahead)
+2. Calculate gradient at that "future" position
+3. Use this gradient for update
+
+### Mathematical Formulation
+```
+# NAG Update Rule
+V_t = β × V_{t-1} + η × ∇L(W - β × V_{t-1})
+W_new = W_old - V_t
+```
+
+Notice: Gradient calculated at `W - β × V_{t-1}` (the look-ahead position)
+
+### Why NAG is Better?
+- **Faster correction:** If momentum is taking you away from minimum, NAG detects it earlier
+- **Reduced oscillations:** More stable near minimum
+- **Anticipatory update:** Knows when to slow down
+
+### Visualization
+```
+Momentum: ●→→→→ (overshoots, comes back)
+NAG:      ●→→→• (slows down near minimum)
+```
+
+### Keras Implementation
+```python
+from tensorflow.keras.optimizers import SGD
+
+optimizer = SGD(learning_rate=0.01, momentum=0.9, nesterov=True)
+model.compile(optimizer=optimizer, loss='mse')
+```
+
+---
+
+## Video 36: AdaGrad (Adaptive Gradient)
+
+### AdaGrad Kya Hai?
+- **Adaptive Learning Rate:** Har parameter ke liye alag learning rate
+- Parameters jo frequently update hote hain → Smaller learning rate
+- Parameters jo rarely update hote hain → Larger learning rate
+
+### Problem Ye Solve Karta Hai
+- **Sparse Data:** Jab kuch features mein bahut saare zeros hon
+- **Elongated Valleys:** Jab loss surface ek direction mein stretch ho
+
+### Sparse Data Problem Explained
+- Agar ek feature column mein mostly 0s hain (sparse)
+- Us feature ka gradient bhi mostly 0 hoga
+- Normal SGD: Us direction mein movement nahi hogi
+- AdaGrad: Sparse feature ko **larger learning rate** deta hai
+
+### Mathematical Formulation
+```
+# Accumulate squared gradients
+G_t = G_{t-1} + (∇L)²
+
+# Update with adaptive learning rate
+W_new = W_old - (η / √(G_t + ε)) × ∇L
+```
+
+Where:
+- **G_t:** Sum of squared past gradients
+- **ε:** Small constant (10⁻⁸) to avoid division by zero
+
+### Key Insight
+- **Large past gradients** → G_t bada → Learning rate CHHOTA
+- **Small past gradients** → G_t chhota → Learning rate BADA
+
+### Advantage
+- No manual learning rate tuning for each parameter
+- Works well with sparse data
+
+### **Big Disadvantage**
+- **Learning rate monotonically decreases** (always reduces)
+- G_t sirf badhta hai (squared values always add)
+- Eventually, learning rate itna chhota ho jaata hai ki **learning ruk jaati hai**
+- **Cannot reach global minimum** in many cases
+
+### When to Use
+- ✅ Linear regression, simple convex problems
+- ❌ Deep neural networks (use RMSProp or Adam instead)
+
+---
+
+## Video 37: RMSProp (Root Mean Square Propagation)
+
+### RMSProp = AdaGrad Ki Problem Ka Solution
+
+### The Fix
+- AdaGrad mein G_t infinitely badhta hai
+- RMSProp: Use **Exponentially Weighted Moving Average** of squared gradients
+- Purane gradients ki importance **decay** hoti hai
+
+### Mathematical Formulation
+```
+# EWMA of squared gradients
+V_t = β × V_{t-1} + (1-β) × (∇L)²
+
+# Update rule
+W_new = W_old - (η / √(V_t + ε)) × ∇L
+```
+
+Where:
+- **β:** Decay rate (typically 0.9 or 0.99)
+- **V_t:** Running average of squared gradients (doesn't explode!)
+
+### Why It Works
+- V_t stays bounded because of exponential decay
+- Learning rate doesn't vanish
+- Can reach global minimum
+
+### RMSProp vs AdaGrad
+| Feature | AdaGrad | RMSProp |
+|---------|---------|---------|
+| G_t behavior | Always increases | Stays bounded |
+| Learning rate | Keeps decreasing | Stabilizes |
+| Convergence | May stall | Reaches minimum |
+| Deep Learning | ❌ Not suitable | ✅ Works well |
+
+### Keras Implementation
+```python
+from tensorflow.keras.optimizers import RMSprop
+
+optimizer = RMSprop(learning_rate=0.001, rho=0.9)  # rho = β
+model.compile(optimizer=optimizer, loss='categorical_crossentropy')
+```
+
+### Key Point
+- RMSProp was the **go-to optimizer** before Adam came
+- Still useful when Adam doesn't work well
+
+---
+
+## Video 38: Adam Optimizer (Adaptive Moment Estimation)
+
+### Adam = RMSProp + Momentum
+- **Most widely used optimizer** in deep learning
+- Combines benefits of both momentum and adaptive learning rates
+
+### Two Key Ideas Combined
+1. **Momentum:** First moment (mean of gradients)
+2. **RMSProp:** Second moment (mean of squared gradients)
+
+### Mathematical Formulation
+```
+# First moment (momentum)
+m_t = β₁ × m_{t-1} + (1-β₁) × ∇L
+
+# Second moment (RMSProp-like)
+v_t = β₂ × v_{t-1} + (1-β₂) × (∇L)²
+
+# Bias correction (important for initial steps)
+m̂_t = m_t / (1 - β₁^t)
+v̂_t = v_t / (1 - β₂^t)
+
+# Update rule
+W_new = W_old - (η / √(v̂_t + ε)) × m̂_t
+```
+
+### Default Hyperparameters
+| Parameter | Default Value | Meaning |
+|-----------|---------------|---------|
+| η (learning rate) | 0.001 | Step size |
+| β₁ | 0.9 | Momentum decay |
+| β₂ | 0.999 | Squared gradient decay |
+| ε | 10⁻⁸ | Numerical stability |
+
+### Why Bias Correction?
+- Initially, m_0 = 0 and v_0 = 0
+- This causes bias towards zero in early steps
+- Bias correction fixes this problem
+
+### Advantages
+1. **Works out of the box** - Default hyperparameters work for most problems
+2. **Adaptive learning rate** - Different for each parameter
+3. **Momentum** - Faster convergence
+4. **Bias correction** - Good performance from step 1
+
+### Keras Implementation
+```python
+from tensorflow.keras.optimizers import Adam
+
+# Using defaults (recommended)
+optimizer = Adam()
+
+# Custom parameters
+optimizer = Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.999)
+
+model.compile(optimizer=optimizer, loss='categorical_crossentropy')
+```
+
+### When to Use What?
+
+| Optimizer | Best For |
+|-----------|----------|
+| SGD | When you need fine control, simple problems |
+| SGD + Momentum | When data is consistent |
+| NAG | Slight improvement over momentum |
+| AdaGrad | Sparse data, convex problems |
+| RMSProp | When Adam doesn't work |
+| **Adam** | **Default choice for most problems** |
+
+### Practical Recommendation
+```python
+# Start with Adam
+optimizer = Adam()
+
+# If not satisfied, try:
+# 1. RMSProp
+# 2. SGD with momentum + learning rate scheduling
+```
+
+---
+
+## Section 5 Summary: Optimizers
+
+| Video | Optimizer | Key Feature | When to Use |
+|-------|-----------|-------------|-------------|
+| 32 | Intro | GD problems explained | - |
+| 33 | EWMA | Foundation for momentum | Building block |
+| 34 | Momentum | Speed up with velocity | Consistent gradients |
+| 35 | NAG | Look-ahead correction | Better than momentum |
+| 36 | AdaGrad | Adaptive LR per param | Sparse data only |
+| 37 | RMSProp | Fixed AdaGrad decay | Deep learning |
+| 38 | Adam | Momentum + RMSProp | **Default choice** |
+
+### Optimizer Evolution Diagram
+```
+SGD → SGD + Momentum → NAG
+         ↓
+      AdaGrad → RMSProp
+                   ↓
+              Adam (combines both branches)
+```
+
+---
+
+# Section 6: CNN Basics (Videos 39-50)
+
+## Video 39: Introduction to CNN - Intuition
+
+### CNN Kya Hai?
+**Convolutional Neural Networks (CNN)** ek special type ki neural network hai jo specifically **grid-like data** ke liye design ki gayi hai - jaise images, time series, etc.
+
+### Why CNN? ANNs Ki Problem
+Agar hum images ko ANNs mein use karte, toh:
+- 28x28 image = 784 pixels = 784 input neurons
+- 100x100 RGB image = 100x100x3 = 30,000 inputs!
+- **Parameters explosion**: Bahut zyada weights = overfitting + computation
+
+### CNN Ki Inspiration - Human Visual Cortex
+CNN human brain ke visual cortex se inspired hai:
+1. **Receptive Fields**: Brain mein cells specific regions ko detect karte hain
+2. **Hierarchy**: Simple features → Complex features → Objects
+3. **Translation Invariance**: Object kahi bhi ho, pehchaan lete hain
+
+### CNN Architecture Overview
+```
+Input Image → [Conv → ReLU → Pool] × n → Flatten → Dense → Output
+```
+
+**Key Components:**
+1. **Convolutional Layer**: Feature extraction
+2. **Pooling Layer**: Downsampling
+3. **Fully Connected Layer**: Classification
+
+### CNN Working Intuition
+- **Early layers**: Simple features detect (edges, corners)
+- **Middle layers**: Intermediate features (shapes, textures)
+- **Later layers**: High-level features (eyes, nose, wheels)
+
+---
+
+## Video 40-41: Convolution Operation
+
+### What is Convolution?
+Convolution ek mathematical operation hai jo images se features extract karta hai.
+
+### Key Components
+
+#### 1. Filter/Kernel
+- Small matrix (e.g., 3x3, 5x5)
+- **Weights** jaise ANN mein, yeh bhi **learnable** hain
+- Different filters different features detect karte hain
+
+#### 2. Convolution Process
+```
+Input Image   Filter    Feature Map
+[a b c d]     [w1 w2]   [out1 out2 out3]
+[e f g h]  *  [w3 w4] = [out4 out5 out6]
+[i j k l]               
+[m n o p]               
+```
+
+**Process:**
+1. Filter ko image ke corner pe rakho
+2. Element-wise multiplication karo
+3. Sum karo → ek value milti hai
+4. Filter ko slide karo (stride ke according)
+5. Repeat karo puri image pe
+
+#### 3. Output Calculation
+```python
+# Formula for output size
+output_size = (input_size - filter_size) / stride + 1
+
+# Example: 6x6 image, 3x3 filter, stride=1
+output = (6 - 3) / 1 + 1 = 4x4 feature map
+```
+
+### Feature Map (Activation Map)
+- Convolution ka output
+- Represents **where and how strongly** a feature exists
+- Multiple filters = Multiple feature maps
+
+### Filters Learn During Training
+- Initially random values
+- Backpropagation se learn karte hain
+- Different filters = Different features:
+  - Horizontal edges
+  - Vertical edges
+  - Corners
+  - Textures
+  - Complex patterns
+
+### Common Edge Detection Filters
+```python
+# Sobel Filter (Vertical Edges)
+[[-1, 0, 1],
+ [-2, 0, 2],
+ [-1, 0, 1]]
+
+# Sobel Filter (Horizontal Edges)
+[[-1, -2, -1],
+ [ 0,  0,  0],
+ [ 1,  2,  1]]
+```
+
+---
+
+## Video 42-43: Padding in CNN
+
+### Why Padding?
+
+#### Problem 1: Shrinking Output
+- Har convolution se image chhoti hoti jaati hai
+- 6x6 → 4x4 → 2x2 (with 3x3 filter)
+- Deep networks mein spatial information lost!
+
+#### Problem 2: Corner Information Loss
+- Corner/edge pixels kam baar use hote hain
+- Center pixels zyada baar → **Bias towards center**
+
+### Padding Kya Hai?
+Image ke around extra pixels (usually 0) add karna.
+
+### Types of Padding
+
+#### 1. Valid Padding (No Padding)
+- P = 0
+- Output size < Input size
+- Information loss at edges
+
+```
+Output = (n - f) / s + 1
+```
+
+#### 2. Same Padding
+- Output size = Input size
+- Formula: P = (f - 1) / 2 (for stride=1)
+- Most commonly used
+
+```
+Output = n (same as input)
+```
+
+### Keras Code Example
+```python
+import tensorflow as tf
+from tensorflow import keras
+from keras.datasets import mnist
+from keras.models import Sequential
+from keras.layers import Conv2D, Flatten, Dense
+
+# Load MNIST data
+(X_train, y_train), (X_test, y_test) = mnist.load_data()
+X_train = X_train.reshape(-1, 28, 28, 1) / 255.0
+X_test = X_test.reshape(-1, 28, 28, 1) / 255.0
+
+# Model with 'same' padding
+model_same = Sequential()
+model_same.add(Conv2D(32, (3, 3), activation='relu', input_shape=(28, 28, 1), padding='same'))
+model_same.add(Conv2D(32, (3, 3), activation='relu', padding='same'))
+model_same.add(Conv2D(32, (3, 3), activation='relu', padding='same'))
+model_same.add(Flatten())
+model_same.add(Dense(10, activation='softmax'))
+
+model_same.summary()
+# Notice: Spatial dimensions remain 28x28 throughout!
+```
+
+---
+
+## Video 44: Strides in CNN
+
+### Stride Kya Hai?
+Filter ko kitna slide karna hai at each step.
+
+### Stride = 1
+- Filter 1 pixel move karta hai
+- Maximum overlap, detailed feature maps
+- Output size larger
+
+### Stride = 2
+- Filter 2 pixels move karta hai
+- Less computation
+- **Downsampling effect** (like pooling)
+- Output size smaller
+
+### Output Size Formula (with Padding and Stride)
+```python
+output = floor((n + 2p - f) / s) + 1
+
+# Where:
+# n = input size
+# p = padding
+# f = filter size
+# s = stride
+```
+
+### Keras Code Example with Strides
+```python
+import tensorflow as tf
+from tensorflow import keras
+from keras.datasets import mnist
+from keras.models import Sequential
+from keras.layers import Conv2D, Flatten, Dense
+
+# Load MNIST data
+(X_train, y_train), (X_test, y_test) = mnist.load_data()
+X_train = X_train.reshape(-1, 28, 28, 1) / 255.0
+X_test = X_test.reshape(-1, 28, 28, 1) / 255.0
+
+# Model with strides
+model_strides = Sequential()
+model_strides.add(Conv2D(32, (3, 3), activation='relu', input_shape=(28, 28, 1), strides=(2, 2)))
+model_strides.add(Conv2D(32, (3, 3), activation='relu', strides=(2, 2)))
+model_strides.add(Conv2D(32, (3, 3), activation='relu', strides=(2, 2)))
+model_strides.add(Flatten())
+model_strides.add(Dense(10, activation='softmax'))
+
+model_strides.summary()
+# Notice: Dimensions decrease rapidly: 28 → 13 → 6 → 2
+```
+
+### Stride vs Pooling for Downsampling
+| Aspect | Large Stride | Pooling |
+|--------|--------------|---------|
+| Parameters | Same as conv | No parameters |
+| Learning | Learns what to keep | Fixed operation |
+| Common use | Modern architectures | Traditional CNNs |
+
+---
+
+## Video 45-46: Pooling Layers
+
+### Pooling Kya Hai?
+Downsampling operation jo feature maps ka size reduce karta hai.
+
+### Why Pooling?
+1. **Reduces computation**: Smaller feature maps = faster training
+2. **Translation invariance**: Object thoda shift ho, phir bhi detect
+3. **Prevents overfitting**: Less parameters
+4. **No learnable parameters**: Fast computation
+
+### Types of Pooling
+
+#### 1. Max Pooling (Most Common)
+- Window mein se maximum value select karta hai
+- Best features ko preserve karta hai
+
+```
+Input:       Max Pool (2x2, stride=2):
+[1 3 2 1]
+[2 9 1 1]    [9 2]
+[1 3 2 3]    [3 4]
+[5 2 4 1]
+```
+
+#### 2. Average Pooling
+- Window mein se average nikalta hai
+- Smoothing effect
+
+```
+Input:       Avg Pool (2x2, stride=2):
+[1 3 2 1]
+[2 9 1 1]    [3.75 1.25]
+[1 3 2 3]    [2.75 2.50]
+[5 2 4 1]
+```
+
+#### 3. Global Pooling
+- Puri feature map se single value
+- **Global Max Pooling**: Maximum of entire feature map
+- **Global Average Pooling**: Average of entire feature map
+- Flatten ki jagah use hota hai modern architectures mein
+
+### Pooling Hyperparameters
+- **Pool size**: Usually 2x2
+- **Stride**: Usually same as pool size (2)
+- No padding typically
+
+### Keras Code Example
+```python
+import tensorflow as tf
+from tensorflow import keras
+from keras.datasets import mnist
+from keras.models import Sequential
+from keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
+
+# Load MNIST data
+(X_train, y_train), (X_test, y_test) = mnist.load_data()
+X_train = X_train.reshape(-1, 28, 28, 1) / 255.0
+X_test = X_test.reshape(-1, 28, 28, 1) / 255.0
+
+# Model with Max Pooling
+model_pooling = Sequential()
+model_pooling.add(Conv2D(32, (3, 3), activation='relu', input_shape=(28, 28, 1)))
+model_pooling.add(MaxPooling2D((2, 2), strides=(2, 2)))
+model_pooling.add(Conv2D(32, (3, 3), activation='relu'))
+model_pooling.add(MaxPooling2D((2, 2), strides=(2, 2)))
+model_pooling.add(Flatten())
+model_pooling.add(Dense(10, activation='softmax'))
+
+model_pooling.summary()
+```
+
+### Pooling Summary
+| Type | Use Case | Advantage |
+|------|----------|-----------|
+| Max | Feature detection | Preserves strongest features |
+| Average | Smooth representations | Reduces noise |
+| Global Max | Before FC layers | Extreme dimensionality reduction |
+| Global Avg | Modern architectures | No FC layers needed |
+
+---
+
+## Video 47-48: LeNet-5 Architecture
+
+### LeNet-5 History
+- Created by **Yann LeCun** in 1998
+- First successful CNN for handwritten digit recognition
+- Foundation of modern CNNs
+
+### LeNet-5 Architecture
+```
+Input (32x32) → C1 → S2 → C3 → S4 → Flatten → F5 → F6 → Output
+```
+
+| Layer | Type | Details | Output Shape |
+|-------|------|---------|--------------|
+| Input | - | Grayscale image | 32x32x1 |
+| C1 | Conv | 6 filters, 5x5, tanh | 28x28x6 |
+| S2 | AvgPool | 2x2, stride 2 | 14x14x6 |
+| C3 | Conv | 16 filters, 5x5, tanh | 10x10x16 |
+| S4 | AvgPool | 2x2, stride 2 | 5x5x16 |
+| Flatten | - | - | 400 |
+| F5 | Dense | 120 neurons, tanh | 120 |
+| F6 | Dense | 84 neurons, tanh | 84 |
+| Output | Dense | 10 neurons, softmax | 10 |
+
+### Key Features of LeNet-5
+1. **Tanh activation** (not ReLU - ReLU wasn't popular then)
+2. **Average pooling** (not max pooling)
+3. **No padding** (valid convolution)
+4. **Relatively shallow** compared to modern CNNs
+
+### Keras Implementation
+```python
+import tensorflow as tf
+from tensorflow import keras
+from keras.datasets import mnist
+from keras.models import Sequential
+from keras.layers import Conv2D, AveragePooling2D, Flatten, Dense
+from keras.activations import tanh, softmax
+
+# Load MNIST data (LeNet-5 expects 32x32, so we'll pad MNIST 28x28 images)
+(X_train, y_train), (X_test, y_test) = mnist.load_data()
+X_train = tf.pad(tf.constant(X_train), [[0,0],[2,2],[2,2]])/255.0
+X_test = tf.pad(tf.constant(X_test), [[0,0],[2,2],[2,2]])/255.0
+X_train = tf.expand_dims(X_train, axis=-1)
+X_test = tf.expand_dims(X_test, axis=-1)
+
+# LeNet-5 Architecture
+model_lenet5 = Sequential()
+
+# C1 Convolutional Layer
+model_lenet5.add(Conv2D(filters=6, kernel_size=(5, 5), activation=tanh, input_shape=(32, 32, 1)))
+# S2 Average Pooling Layer
+model_lenet5.add(AveragePooling2D(pool_size=(2, 2), strides=(2, 2)))
+
+# C3 Convolutional Layer
+model_lenet5.add(Conv2D(filters=16, kernel_size=(5, 5), activation=tanh))
+# S4 Average Pooling Layer
+model_lenet5.add(AveragePooling2D(pool_size=(2, 2), strides=(2, 2)))
+
+# Flatten Layer
+model_lenet5.add(Flatten())
+
+# F5 Fully Connected Layer
+model_lenet5.add(Dense(units=120, activation=tanh))
+
+# F6 Fully Connected Layer
+model_lenet5.add(Dense(units=84, activation=tanh))
+
+# Output Layer
+model_lenet5.add(Dense(units=10, activation=softmax))
+
+model_lenet5.summary()
+```
+
+### LeNet-5 vs Modern CNNs
+| Aspect | LeNet-5 | Modern CNNs |
+|--------|---------|-------------|
+| Activation | Tanh | ReLU |
+| Pooling | Average | Max |
+| Depth | 5 layers | 50-150+ layers |
+| Techniques | Basic | Batch Norm, Dropout, Skip connections |
+
+---
+
+## Video 49-50: Backpropagation in CNN
+
+### CNN Mein Backprop Kaise Hota Hai?
+
+CNN mein bhi backpropagation same chain rule follow karta hai, but calculations thodi different hain due to convolution operation.
+
+### Trainable Parameters in CNN
+1. **Conv layers**: Filter weights + biases
+2. **Dense layers**: Weights + biases
+3. **Pooling layers**: **No trainable parameters!**
+
+### Gradient Flow in CNN
+```
+Loss → Output Layer → Dense Layers → Flatten → Pooling → Conv Layers
+```
+
+### Backprop Through Different Layers
+
+#### 1. Backprop Through Dense Layer
+- Same as ANN
+- `dW = dL/dW`, `db = dL/db`
+
+#### 2. Backprop Through Flatten Layer
+- Reverse reshape operation
+- 1D vector → 2D/3D tensor
+
+#### 3. Backprop Through Max Pooling
+- Gradient flows only to **maximum position**
+- Other positions get **zero gradient**
+
+```
+Forward:        Backward:
+[1 3]           [0 dL]
+[5 2] → 5       [dL 0]
+                (gradient only to max position)
+```
+
+#### 4. Backprop Through Conv Layer
+- **For weights**: Convolution of input with upstream gradient
+- **For biases**: Sum of upstream gradient
+- **For input**: "Full" convolution with flipped filter
+
+### Computational Graph View
+```
+Input → Conv (W) → ReLU → Pool → Conv (W) → ... → Dense → Loss
+              ↓                        ↓              ↓
+         dL/dW                    dL/dW           dL/dW
+```
+
+### Key Points
+1. **Pooling backprop**: No weights to update, just route gradients
+2. **Conv backprop**: Update filter weights based on how input affects loss
+3. **Chain rule**: Multiply gradients through each layer
+
+---
+
+## Section 6 Summary: CNN Basics
+
+| Video | Topic | Key Concept |
+|-------|-------|-------------|
+| 39 | CNN Intro | Visual cortex inspiration, hierarchy |
+| 40-41 | Convolution | Filter sliding, feature extraction |
+| 42-43 | Padding | Same vs Valid, edge preservation |
+| 44 | Strides | Downsampling, output size formula |
+| 45-46 | Pooling | Max/Avg pooling, translation invariance |
+| 47-48 | LeNet-5 | First successful CNN architecture |
+| 49-50 | Backprop | Gradient flow in CNN layers |
+
+### CNN Building Blocks
+```
+Standard CNN Pattern:
+[Conv → Activation → Pool] × N → Flatten → Dense × M → Output
+
+Modern CNN Pattern:
+[Conv → BatchNorm → Activation → Pool] × N → GlobalAvgPool → Dense → Output
+```
+
+### Output Size Formulas
+```python
+# Convolution/Pooling output size:
+output = floor((input + 2*padding - filter) / stride) + 1
+
+# Same padding (stride=1):
+padding = (filter - 1) / 2
+
+# Number of parameters in Conv layer:
+params = (filter_h × filter_w × input_channels + 1) × num_filters
+```
+
+---
+
+# Section 7: CNN Advanced (Videos 51-58)
+
+## Video 51-53: Data Augmentation
+
+### Data Augmentation Kya Hai?
+**Data Augmentation** ek technique hai jisme existing images se naye images generate karte hain using various transformations.
+
+### Why Data Augmentation?
+
+#### Problem 1: Limited Data
+- Deep learning models ko bahut saara data chahiye
+- Real-world mein labeled data expensive hai
+- Medical field mein data collection bahut difficult
+
+#### Problem 2: Overfitting
+- Limited data pe model overfit ho jata hai
+- Training accuracy >> Validation accuracy
+- Model generalize nahi kar pata
+
+### How It Solves Both Problems
+1. **More data**: 1000 images → 10,000+ augmented images
+2. **Better generalization**: Model different variations dekhta hai
+3. **Reduces overfitting**: Training data mein variety
+
+### Common Augmentation Techniques
+
+#### 1. Geometric Transformations
+```python
+# Rotation - image rotate karna
+rotation_range = 20  # -20° to +20°
+
+# Horizontal Flip - left-right flip
+horizontal_flip = True
+
+# Vertical Flip - up-down flip (use carefully!)
+vertical_flip = True  # Cats can't be upside down!
+
+# Zoom - zoom in/out
+zoom_range = 0.2  # 0.8x to 1.2x
+
+# Shift - image ko slide karna
+width_shift_range = 0.2  # 20% horizontal shift
+height_shift_range = 0.2  # 20% vertical shift
+
+# Shear - skew transformation
+shear_range = 0.2
+```
+
+#### 2. Fill Modes (Border Handling)
+```python
+# When image shifts, empty space ka kya karna hai?
+fill_mode = 'nearest'   # Copy nearest pixels
+fill_mode = 'reflect'   # Mirror reflection
+fill_mode = 'constant'  # Fill with constant (usually 0 = black)
+fill_mode = 'wrap'      # Wrap around
+```
+
+### Keras ImageDataGenerator
+```python
+from keras.preprocessing.image import ImageDataGenerator
+
+# Create augmentation generator
+datagen = ImageDataGenerator(
+    rescale=1./255,           # Normalize to 0-1
+    rotation_range=20,         # Random rotation
+    width_shift_range=0.2,     # Horizontal shift
+    height_shift_range=0.2,    # Vertical shift
+    shear_range=0.2,           # Shear transformation
+    zoom_range=0.2,            # Random zoom
+    horizontal_flip=True,      # Horizontal flip
+    fill_mode='nearest'        # Fill empty pixels
+)
+
+# For training data with augmentation
+train_generator = datagen.flow_from_directory(
+    'data/train',
+    target_size=(150, 150),
+    batch_size=32,
+    class_mode='binary'
+)
+
+# For validation/test - NO augmentation, only rescale!
+test_datagen = ImageDataGenerator(rescale=1./255)
+validation_generator = test_datagen.flow_from_directory(
+    'data/validation',
+    target_size=(150, 150),
+    batch_size=32,
+    class_mode='binary'
+)
+```
+
+### Important Points
+1. **Only augment training data**, not validation/test
+2. **Be domain-aware**: Vertical flip for cats = bad idea!
+3. **Augmentation happens on-the-fly** during training
+4. **Original images** are never modified
+
+### Results
+- Without augmentation: ~57% validation accuracy
+- With augmentation: ~75%+ validation accuracy
+- Significant reduction in overfitting
+
+---
+
+## Video 54-56: Transfer Learning
+
+### Transfer Learning Kya Hai?
+Ek dataset pe trained model ka knowledge dusre related problem pe use karna.
+
+### Real-Life Analogy
+- **Bicycle → Motorcycle**: Balance seekhne ke baad motorcycle easy
+- **Violin → Guitar**: Musical notes ka knowledge transfer
+- **Math → Physics**: Mathematical concepts transfer ho jaate hain
+
+### Why Transfer Learning?
+
+#### Problems with Training from Scratch
+1. **Need lot of labeled data** - expensive to create
+2. **Training time** - days/weeks on GPUs
+3. **Computational resources** - not everyone has
+
+#### Transfer Learning Benefits
+1. **Less data required**
+2. **Faster training**
+3. **Better performance** (pre-trained on millions of images)
+
+### Pre-trained Models
+Models trained on ImageNet (1.4 million images, 1000 classes):
+- **VGG16, VGG19**
+- **ResNet50, ResNet101**
+- **InceptionV3**
+- **MobileNet** (for mobile devices)
+- **EfficientNet** (modern, efficient)
+
+### CNN Architecture for Transfer Learning
+```
+CNN Model:
+[Convolutional Base (Feature Extraction)] → [Dense Layers (Classification)]
+         ↓                                           ↓
+   Pre-trained weights                          Custom for your task
+```
+
+### Two Approaches
+
+#### 1. Feature Extraction
+- **Freeze** entire convolutional base
+- Only train **new dense layers**
+- Use when: Your data is similar to ImageNet
+
+```python
+from keras.applications import VGG16
+from keras.models import Sequential
+from keras.layers import Flatten, Dense
+
+# Load pre-trained VGG16 without top layers
+conv_base = VGG16(weights='imagenet', 
+                  include_top=False, 
+                  input_shape=(150, 150, 3))
+
+# Freeze the conv base
+conv_base.trainable = False
+
+# Build model
+model = Sequential([
+    conv_base,
+    Flatten(),
+    Dense(256, activation='relu'),
+    Dense(1, activation='sigmoid')  # Binary classification
+])
+
+model.compile(optimizer='adam',
+              loss='binary_crossentropy',
+              metrics=['accuracy'])
+```
+
+#### 2. Fine-Tuning
+- **Freeze** early layers (generic features)
+- **Unfreeze** later layers (task-specific features)
+- Train with **low learning rate**
+- Use when: Your data is different from ImageNet
+
+```python
+from keras.applications import VGG16
+from keras.models import Sequential
+from keras.layers import Flatten, Dense
+from keras.optimizers import RMSprop
+
+# Load pre-trained VGG16
+conv_base = VGG16(weights='imagenet', 
+                  include_top=False, 
+                  input_shape=(150, 150, 3))
+
+# Unfreeze last few layers
+conv_base.trainable = True
+for layer in conv_base.layers[:-4]:  # Freeze all except last 4 layers
+    layer.trainable = False
+
+# Build model
+model = Sequential([
+    conv_base,
+    Flatten(),
+    Dense(256, activation='relu'),
+    Dense(1, activation='sigmoid')
+])
+
+# Use LOW learning rate for fine-tuning!
+model.compile(optimizer=RMSprop(learning_rate=1e-5),
+              loss='binary_crossentropy',
+              metrics=['accuracy'])
+```
+
+### When to Use What?
+| Scenario | Approach | Reason |
+|----------|----------|--------|
+| Similar data, small dataset | Feature Extraction | Pre-trained features work well |
+| Similar data, large dataset | Fine-tune last layers | Can learn better features |
+| Different data, small dataset | Feature Extraction + augmentation | Avoid overfitting |
+| Different data, large dataset | Fine-tune more layers | Need to adapt features |
+
+### Results Comparison (Cat vs Dog)
+| Approach | Validation Accuracy |
+|----------|---------------------|
+| Custom CNN from scratch | ~81% |
+| VGG16 Feature Extraction | ~90% |
+| VGG16 Fine-Tuning | ~95% |
+
+### Transfer Learning Summary
+1. Use **pre-trained models** to save time and resources
+2. **Feature extraction**: Freeze conv base, train dense layers
+3. **Fine-tuning**: Unfreeze some layers, low learning rate
+4. Always better than training from scratch!
+
+---
+
+## Video 57-58: Advanced CNN Architectures Overview
+
+### Evolution of CNNs
+```
+LeNet-5 (1998) → AlexNet (2012) → VGGNet (2014) → GoogLeNet/Inception (2014) 
+→ ResNet (2015) → DenseNet (2017) → EfficientNet (2019)
+```
+
+### Key Architectures
+
+#### AlexNet (2012)
+- First CNN to win ImageNet
+- 8 layers deep
+- Introduced ReLU, Dropout, GPU training
+
+#### VGGNet (2014)
+- Simple architecture
+- Only 3x3 convolutions
+- VGG16 (16 layers), VGG19 (19 layers)
+- 138 million parameters!
+
+#### GoogLeNet/Inception (2014)
+- Introduced **Inception modules**
+- Multiple filter sizes in parallel
+- 22 layers but only 5 million parameters
+
+#### ResNet (2015)
+- Introduced **Skip Connections**
+- Solved vanishing gradient problem
+- Can train 152+ layer networks!
+- **Residual learning**: `output = F(x) + x`
+
+```
+Skip Connection:
+      x ────────────────┐
+      ↓                 ↓
+   Conv → ReLU → Conv  (+) → ReLU → output
+```
+
+---
+
+## Section 7 Summary: CNN Advanced
+
+| Video | Topic | Key Concept |
+|-------|-------|-------------|
+| 51-53 | Data Augmentation | Generate more data, reduce overfitting |
+| 54-56 | Transfer Learning | Use pre-trained models |
+| 57-58 | Advanced Architectures | AlexNet, VGG, ResNet evolution |
+
+### Quick Decision Guide
+```
+Have enough data?
+├── Yes → Train from scratch OR Fine-tune
+└── No  → Use Data Augmentation + Transfer Learning
+
+Similar to ImageNet?
+├── Yes → Feature Extraction (freeze conv base)
+└── No  → Fine-Tuning (unfreeze some layers)
+```
+
+---
+
+# Section 8: Recurrent Neural Networks (RNNs) (Videos 59-68)
+
+## Video 59-60: Why RNNs are Needed & RNN Architecture
+
+### Sequential Data Kya Hai?
+- Data jahan **order matter karta hai**
+- Examples:
+  - Text/Language (sentences, paragraphs)
+  - Time series (stock prices, weather)
+  - Audio/Speech
+  - DNA sequences
+  - Video frames
+
+### ANNs Ki Limitations for Sequential Data
+
+**Problem 1: Fixed Input Size**
+```
+ANN expects fixed input size!
+
+"I love ML"     → 3 words
+"Deep Learning" → 2 words
+
+Padding solution:
+"Deep Learning" → "Deep Learning <PAD>" → Still 3 inputs
+```
+
+**Problem 2: No Memory/Context**
+- ANNs process all inputs simultaneously
+- Lose the **order information**
+- Can't remember previous inputs
+
+**Problem 3: Weight Explosion**
+```
+If vocab = 10,000 words
+And max_length = 100 words
+Then input features = 10,000 × 100 = 1,000,000!
+Too many parameters!
+```
+
+### RNN Architecture
+
+**Key Innovation: Feedback Loop**
+```
+         ┌─────────────┐
+         │  Hidden     │◄──┐
+X_t ──►  │   Layer     │   │ Feedback (H_t-1)
+         └──────┬──────┘   │
+                │          │
+                ▼          │
+              H_t ─────────┘
+                │
+                ▼
+              Y_t
+```
+
+**RNN Cell at Time Step t:**
+```
+H_t = tanh(W_in × X_t + W_h × H_{t-1} + B_h)
+Y_t = sigmoid(W_out × H_t + B_out)
+```
+
+Where:
+- `X_t` = Input at time t
+- `H_t` = Hidden state at time t (memory)
+- `H_{t-1}` = Previous hidden state
+- `Y_t` = Output at time t
+- `W_in`, `W_h`, `W_out` = Shared weights (same across all time steps!)
+
+**Weight Sharing Advantage:**
+```
+Without RNN: Each position has different weights
+    W1, W2, W3, W4, ... (millions of parameters)
+
+With RNN: Same weights reused at every step
+    W_in, W_h, W_out (only 3 weight matrices!)
+```
+
+### Forward Propagation in RNN
+```
+Time t=0: H_0 = 0 (zero vector)
+Time t=1: H_1 = tanh(W_in × X_1 + W_h × H_0)
+Time t=2: H_2 = tanh(W_in × X_2 + W_h × H_1)
+Time t=3: H_3 = tanh(W_in × X_3 + W_h × H_2)
+...
+```
+
+**Example: Sentiment Analysis**
+```
+Input: "I love this movie"
+
+Step 1: X_1 = "I"      → H_1 (some understanding)
+Step 2: X_2 = "love"   → H_2 (understanding "I love")
+Step 3: X_3 = "this"   → H_3 (understanding "I love this")
+Step 4: X_4 = "movie"  → H_4 (full sentence understanding)
+
+Final H_4 → Dense → Sigmoid → Positive/Negative
+```
+
+---
+
+## Video 61-62: Types of RNN Architectures
+
+### 1. Many-to-One (Sequence to Vector)
+**Input:** Sequence | **Output:** Single value
+
+```
+    X1    X2    X3    X4
+    ↓     ↓     ↓     ↓
+   [RNN]→[RNN]→[RNN]→[RNN]
+                        ↓
+                      Output
+```
+
+**Applications:**
+- Sentiment Analysis: "I love this movie" → Positive
+- Document Classification: Article → Category
+- Rating Prediction: Review → 1-5 stars
+
+---
+
+### 2. One-to-Many (Vector to Sequence)
+**Input:** Single value | **Output:** Sequence
+
+```
+   Input
+    ↓
+   [RNN]→[RNN]→[RNN]→[RNN]
+    ↓     ↓     ↓     ↓
+    Y1    Y2    Y3    Y4
+```
+
+**Applications:**
+- Image Captioning: Image → "A dog playing in the park"
+- Music Generation: Genre → Musical notes sequence
+
+---
+
+### 3. Many-to-Many (Synchronous)
+**Input:** Sequence | **Output:** Same length sequence
+
+```
+    X1    X2    X3    X4
+    ↓     ↓     ↓     ↓
+   [RNN]→[RNN]→[RNN]→[RNN]
+    ↓     ↓     ↓     ↓
+    Y1    Y2    Y3    Y4
+```
+
+**Applications:**
+- Part-of-Speech Tagging: "I love ML" → "Pronoun Verb Noun"
+- Named Entity Recognition: "Apple is in California" → "ORG O O LOC"
+
+---
+
+### 4. Many-to-Many (Asynchronous/Encoder-Decoder)
+**Input:** Sequence | **Output:** Different length sequence
+
+```
+ENCODER:          DECODER:
+X1  X2  X3        Y1  Y2  Y3  Y4
+↓   ↓   ↓         ↓   ↓   ↓   ↓
+[E]→[E]→[E]──────►[D]→[D]→[D]→[D]
+         Context Vector
+```
+
+**Applications:**
+- Machine Translation: "I am happy" → "मैं खुश हूं"
+- Text Summarization: Long article → Short summary
+- Question Answering: Question → Answer
+
+---
+
+## Video 63-64: Problems with RNNs
+
+### Problem 1: Vanishing Gradient
+```
+Backpropagation through time:
+
+Loss at t=100
+    ↓
+Gradient flows backward: t=100 → t=99 → ... → t=1
+
+Each step: gradient = gradient × derivative of tanh
+
+tanh derivative is always < 1
+After 100 multiplications: gradient ≈ 0
+```
+
+**Effect:**
+- Early layers don't learn
+- Model can't capture **long-term dependencies**
+- Forgets information from beginning of sequence
+
+**Example:**
+```
+"The cat, which was sitting on the mat in the house 
+that Jack built, was ___"
+
+RNN forgets "cat" by the time it reaches the blank!
+```
+
+### Problem 2: Exploding Gradient
+```
+If weights > 1 and many time steps:
+gradient grows exponentially → Infinity!
+
+Results:
+- NaN values
+- Unstable training
+- Model diverges
+```
+
+**Solutions:**
+1. **Gradient Clipping:** Cap gradients at max threshold
+2. **Better Weight Initialization:** Identity matrix for W_h
+3. **Use LSTM/GRU:** Architectures designed to solve this
+
+```python
+# Gradient Clipping in Keras
+optimizer = keras.optimizers.Adam(clipvalue=1.0)
+# or
+optimizer = keras.optimizers.Adam(clipnorm=1.0)
+```
+
+---
+
+## Video 65-66: LSTM (Long Short-Term Memory)
+
+### LSTM Ka Idea
+- Introduced **Cell State** (`C_t`) as **long-term memory**
+- Cell State runs like a **highway** through entire sequence
+- **Gates** control what to remember/forget
+
+### LSTM Architecture
+```
+                    Cell State Highway
+        C_{t-1} ─────────────────────────────► C_t
+                      ↑           ↑
+                   [forget]   [update]
+                      │           │
+        ┌─────────────┼───────────┼──────────────┐
+        │             │           │              │
+X_t ──► │    ┌────────┴──┐  ┌────┴────┐        │
+        │    │ Forget    │  │ Input   │        │
+H_{t-1}─┼──► │   Gate    │  │  Gate   │        │
+        │    └───────────┘  └─────────┘        │
+        │                                       │
+        │         ┌────────────────────┐       │
+        │         │    Output Gate     │       │
+        │         └────────┬───────────┘       │
+        └──────────────────┼───────────────────┘
+                           ▼
+                          H_t ───────────────────►
+```
+
+### Three Gates in LSTM
+
+**1. Forget Gate (`f_t`):** What to forget from cell state?
+```
+f_t = sigmoid(W_f × [H_{t-1}, X_t] + B_f)
+
+Output: 0 to 1
+- 0 = Forget completely
+- 1 = Remember completely
+```
+
+**2. Input Gate (`i_t`):** What new info to store?
+```
+i_t = sigmoid(W_i × [H_{t-1}, X_t] + B_i)
+C̃_t = tanh(W_C × [H_{t-1}, X_t] + B_C)
+
+i_t decides: How much of new info to add
+C̃_t creates: New candidate values
+```
+
+**3. Output Gate (`o_t`):** What to output?
+```
+o_t = sigmoid(W_o × [H_{t-1}, X_t] + B_o)
+H_t = o_t × tanh(C_t)
+```
+
+### LSTM Update Equations
+```
+# Step 1: Forget old info
+C_t = f_t × C_{t-1}
+
+# Step 2: Add new info
+C_t = C_t + i_t × C̃_t
+
+# Step 3: Calculate output
+H_t = o_t × tanh(C_t)
+```
+
+### LSTM in Keras
+```python
+from tensorflow.keras.layers import LSTM
+from tensorflow.keras.models import Sequential
+
+model = Sequential([
+    LSTM(64, input_shape=(sequence_length, features)),
+    Dense(1, activation='sigmoid')
+])
+```
+
+---
+
+## Video 67: GRU (Gated Recurrent Unit)
+
+### GRU vs LSTM
+| Feature | LSTM | GRU |
+|---------|------|-----|
+| Gates | 3 (Forget, Input, Output) | 2 (Update, Reset) |
+| States | Cell State + Hidden State | Hidden State only |
+| Parameters | More | Less |
+| Training Speed | Slower | Faster |
+| Performance | Similar | Similar |
+
+### GRU Architecture
+```
+        H_{t-1} ─────────────────────────────► H_t
+                      ↑           ↑
+                   [update]    [reset]
+                      │           │
+X_t ────────────────►[GRU Cell]──────────────►
+```
+
+### GRU Gate Equations
+
+**1. Update Gate (`z_t`):** How much past to keep?
+```
+z_t = sigmoid(W_z × [H_{t-1}, X_t] + B_z)
+```
+
+**2. Reset Gate (`r_t`):** How much past to forget for candidate?
+```
+r_t = sigmoid(W_r × [H_{t-1}, X_t] + B_r)
+```
+
+**3. Candidate Hidden State (`H̃_t`):**
+```
+H̃_t = tanh(W_h × [r_t × H_{t-1}, X_t] + B_h)
+```
+
+**4. Final Hidden State:**
+```
+H_t = (1 - z_t) × H_{t-1} + z_t × H̃_t
+```
+
+### GRU in Keras
+```python
+from tensorflow.keras.layers import GRU
+from tensorflow.keras.models import Sequential
+
+model = Sequential([
+    GRU(64, input_shape=(sequence_length, features)),
+    Dense(1, activation='sigmoid')
+])
+```
+
+### When to Use What?
+```
+Have limited compute?
+├── Yes → Use GRU (fewer parameters)
+└── No  → Use LSTM (slightly better for long sequences)
+
+Dataset size:
+├── Small → GRU (less overfitting)
+└── Large → Either works
+```
+
+---
+
+## Video 68: Deep RNNs & Bidirectional RNNs
+
+### Deep RNNs (Stacked RNNs)
+- Multiple RNN layers stacked on top
+- Each layer learns different abstraction level
+
+```
+Layer 3: [RNN]→[RNN]→[RNN]→[RNN] → High-level features
+           ↑     ↑     ↑     ↑
+Layer 2: [RNN]→[RNN]→[RNN]→[RNN] → Mid-level features
+           ↑     ↑     ↑     ↑
+Layer 1: [RNN]→[RNN]→[RNN]→[RNN] → Low-level features
+           ↑     ↑     ↑     ↑
+          X1    X2    X3    X4
+```
+
+**Important:** `return_sequences=True` for all layers except last!
+
+```python
+model = Sequential([
+    LSTM(64, return_sequences=True, input_shape=(seq_len, features)),
+    LSTM(64, return_sequences=True),
+    LSTM(64),  # Last layer: return_sequences=False (default)
+    Dense(1, activation='sigmoid')
+])
+```
+
+### Bidirectional RNNs
+- Process sequence in **both directions**
+- Forward RNN: Left to Right
+- Backward RNN: Right to Left
+- Concatenate both hidden states
+
+```
+Forward:   [→RNN]→[→RNN]→[→RNN]→[→RNN]
+              ↓     ↓     ↓     ↓
+Concat:      [H]   [H]   [H]   [H]
+              ↑     ↑     ↑     ↑
+Backward:  [←RNN]←[←RNN]←[←RNN]←[←RNN]
+              ↑     ↑     ↑     ↑
+             X1    X2    X3    X4
+```
+
+**Why Bidirectional?**
+```
+Sentence: "The man who had the telescope saw the astronomer"
+
+Forward only: Sees "telescope" before "astronomer"
+Backward only: Sees "astronomer" before "telescope"
+Both: Full context for "saw" - who used what!
+```
+
+**Applications:**
+- Named Entity Recognition
+- Machine Translation
+- Speech Recognition
+- NOT for real-time prediction (need future context)
+
+```python
+from tensorflow.keras.layers import Bidirectional, LSTM
+
+model = Sequential([
+    Bidirectional(LSTM(64), input_shape=(seq_len, features)),
+    Dense(1, activation='sigmoid')
+])
+# Output size: 64 × 2 = 128 (concatenated)
+```
+
+---
+
+## Section 8 Summary: RNN Basics
+
+| Video | Topic | Key Concept |
+|-------|-------|-------------|
+| 59-60 | RNN Introduction | Sequential data, weight sharing, memory |
+| 61-62 | Types of RNN | Many-to-One, One-to-Many, Many-to-Many |
+| 63-64 | RNN Problems | Vanishing/Exploding gradients |
+| 65-66 | LSTM | 3 gates, Cell state for long-term memory |
+| 67 | GRU | 2 gates, simpler than LSTM |
+| 68 | Advanced RNNs | Deep RNNs, Bidirectional RNNs |
+
+### Quick Reference
+```
+Simple RNN → Short sequences, fast training
+LSTM → Long sequences, need long-term memory
+GRU → Like LSTM but faster, fewer parameters
+Deep RNN → Complex patterns, hierarchical features
+Bidirectional → Need both past and future context
+```
+
+---
+
+# Section 9: Attention & Transformers (Videos 69-84)
+
+## Video 69-70: Encoder-Decoder Architecture
+
+### Sequence-to-Sequence Problem
+```
+Input: "I love India" (3 words)
+Output: "मुझे भारत से प्यार है" (5 words)
+
+Input/Output lengths different!
+```
+
+### Encoder-Decoder Architecture
+```
+ENCODER (LSTM/GRU):
+"I" → [E] → H1
+"love" → [E] → H2  (using H1)
+"India" → [E] → H3 (using H2)
+                ↓
+           Context Vector (compressed info of entire sentence)
+                ↓
+DECODER (LSTM/GRU):
+[D] → "मुझे"
+[D] → "भारत"   (using previous output)
+[D] → "से"
+[D] → "प्यार"
+[D] → "है"
+[D] → <EOS>
+```
+
+### Training Process
+1. **Encoder** processes input sequence → Context Vector
+2. **Decoder** generates output using Teacher Forcing
+3. Loss: Cross-Entropy between predicted and actual words
+
+**Teacher Forcing:** During training, feed **correct** previous word (not predicted)
+
+### Problem with Basic Encoder-Decoder
+```
+"The cat that was sitting on the mat was ___"
+
+All information compressed into ONE context vector!
+For long sentences → Information loss
+Model "forgets" beginning of sentence
+```
+
+**Experimental Finding:**
+- Works well for sentences < 30 words
+- Performance degrades significantly for longer sequences
+
+---
+
+## Video 71-72: Attention Mechanism
+
+### Core Idea
+Instead of ONE fixed context vector, create **DYNAMIC context vector** for each decoder step!
+
+```
+Without Attention:
+Encoder → [Single Context Vector] → Decoder (all steps)
+
+With Attention:
+Encoder → [All Hidden States Available] → Decoder
+                    ↓
+          Dynamic Context for each output word
+```
+
+### How Attention Works
+```
+For generating word "मुझे":
+
+1. Look at ALL encoder hidden states: H1, H2, H3
+2. Calculate relevance scores: 
+   - How relevant is H1 ("I") for generating "मुझे"?
+   - How relevant is H2 ("love") for generating "मुझे"?
+   - How relevant is H3 ("India") for generating "मुझे"?
+3. Convert scores to weights (softmax)
+4. Weighted sum = Context vector for "मुझे"
+5. Use this context to generate "मुझे"
+```
+
+### Bahdanau vs Luong Attention
+
+| Feature | Bahdanau | Luong |
+|---------|----------|-------|
+| Alignment | Additive (neural network) | Multiplicative (dot product) |
+| Uses | Previous decoder state (S_{t-1}) | Current decoder state (S_t) |
+| Complexity | More parameters | Fewer parameters |
+| Speed | Slower | Faster |
+
+**Bahdanau Attention:**
+```
+e_ij = v_a^T × tanh(W_a × s_{i-1} + U_a × h_j)
+α_ij = softmax(e_ij)
+C_i = Σ α_ij × h_j
+```
+
+**Luong Attention (Dot Product):**
+```
+e_ij = s_i^T × h_j
+α_ij = softmax(e_ij)
+C_i = Σ α_ij × h_j
+```
+
+### Benefits of Attention
+1. Solves long-term dependency problem
+2. Better translation quality for long sentences
+3. **Interpretability:** Can visualize what input words model focuses on
+
+---
+
+## Video 73-74: Self-Attention
+
+### Problem with Traditional Attention
+- Attention between **two different sequences** (encoder → decoder)
+- What about understanding **within same sequence**?
+
+### Self-Attention Idea
+```
+Sentence: "The bank is by the river"
+
+Traditional Embedding: "bank" → [0.2, 0.5, ...] (same always)
+
+Problem: "bank" can mean:
+1. Financial institution
+2. River bank
+
+Self-Attention: Create CONTEXTUAL embedding
+- "bank" in "money bank" → financial meaning
+- "bank" in "river bank" → geographical meaning
+```
+
+### Query, Key, Value (QKV) Concept
+For each word, create 3 vectors:
+- **Query (Q):** What am I looking for?
+- **Key (K):** What do I contain?
+- **Value (V):** What information do I provide?
+
+```
+Word embedding → × W_q → Query
+Word embedding → × W_k → Key
+Word embedding → × W_v → Value
+```
+
+### Self-Attention Calculation
+```
+1. For each word, compute Q, K, V
+2. Attention Score = Q × K^T (how similar?)
+3. Scale: Score / √d_k (for stable gradients)
+4. Weights = Softmax(Scaled Scores)
+5. Output = Weights × V (weighted sum of values)
+```
+
+**Matrix Form:**
+```
+Attention(Q, K, V) = softmax(Q × K^T / √d_k) × V
+```
+
+### Self-Attention vs Cross-Attention
+| Self-Attention | Cross-Attention |
+|----------------|-----------------|
+| Same sequence | Two different sequences |
+| Q, K, V from same input | Q from one, K,V from other |
+| Word relationships within sentence | Encoder-Decoder alignment |
+
+---
+
+## Video 75-76: Multi-Head Attention
+
+### Why Multiple Heads?
+One attention head captures ONE type of relationship.
+Multiple heads capture MULTIPLE relationships!
+
+```
+Head 1: Focuses on syntactic relationships
+Head 2: Focuses on semantic relationships
+Head 3: Focuses on positional relationships
+...
+```
+
+### Multi-Head Attention Architecture
+```
+Input → Split into h heads
+         ↓
+    Head 1: Q1, K1, V1 → Attention → Z1
+    Head 2: Q2, K2, V2 → Attention → Z2
+    ...
+    Head h: Qh, Kh, Vh → Attention → Zh
+         ↓
+    Concatenate [Z1, Z2, ..., Zh]
+         ↓
+    Linear transformation (W_o)
+         ↓
+    Output
+```
+
+**Formula:**
+```
+MultiHead(Q, K, V) = Concat(head_1, ..., head_h) × W_o
+
+where head_i = Attention(Q × W_qi, K × W_ki, V × W_vi)
+```
+
+### Dimensionality in Original Transformer
+```
+d_model = 512 (embedding dimension)
+h = 8 (number of heads)
+d_k = d_v = d_model / h = 64 (dimension per head)
+
+Each head works with 64-dim vectors
+8 heads × 64 = 512 (back to original dimension)
+```
+
+---
+
+## Video 77: Positional Encoding
+
+### Problem
+Self-Attention processes all words in **parallel** → No order information!
+
+```
+"Dog bites man" and "Man bites dog" 
+Would have same attention output! ❌
+```
+
+### Solution: Positional Encoding
+Add position information to embeddings.
+
+```
+Final Input = Word Embedding + Positional Encoding
+```
+
+### Why Not Simple Numbers (1, 2, 3...)?
+1. **Unbounded:** Position can go to infinity
+2. **Variable normalization:** Same position = different value for different sentence lengths
+3. **Not continuous:** Neural networks prefer smooth values
+
+### Sinusoidal Positional Encoding
+```
+PE(pos, 2i) = sin(pos / 10000^(2i/d_model))
+PE(pos, 2i+1) = cos(pos / 10000^(2i/d_model))
+
+pos = position in sequence (0, 1, 2, ...)
+i = dimension index (0, 1, 2, ..., d_model/2)
+```
+
+**Benefits:**
+1. Bounded: Values between -1 and 1
+2. Continuous: Smooth transitions
+3. Unique: Each position gets unique encoding
+4. **Relative positions:** Model can learn `PE(pos+k)` from `PE(pos)`
+5. Generalizes: Works for any sequence length
+
+---
+
+## Video 78-79: Transformer Architecture
+
+### Why Transformers?
+| RNN/LSTM | Transformer |
+|----------|-------------|
+| Sequential processing | Parallel processing |
+| O(n) steps | O(1) steps |
+| Slow training | Fast training |
+| Limited by memory | Attention spans entire sequence |
+
+### Transformer = Attention is All You Need!
+No RNN, No LSTM, No Convolution!
+Just Attention + Feed Forward Networks
+
+### Overall Architecture
+```
+        Input                    Output (shifted right)
+          ↓                            ↓
+    [Embedding]                  [Embedding]
+          ↓                            ↓
+    [Positional                  [Positional
+     Encoding]                    Encoding]
+          ↓                            ↓
+    ┌─────────┐                  ┌─────────┐
+    │ ENCODER │                  │ DECODER │
+    │   ×6    │─────────────────►│   ×6    │
+    └─────────┘                  └─────────┘
+                                       ↓
+                                 [Linear]
+                                       ↓
+                                 [Softmax]
+                                       ↓
+                                   Output
+```
+
+### Encoder Block (×6)
+```
+Input
+  ↓
+[Multi-Head Self-Attention]
+  ↓
+[Add & Norm] ←── (Residual Connection)
+  ↓
+[Feed Forward Network]
+  ↓
+[Add & Norm] ←── (Residual Connection)
+  ↓
+Output
+```
+
+### Decoder Block (×6)
+```
+Output (shifted right)
+  ↓
+[Masked Multi-Head Self-Attention]
+  ↓
+[Add & Norm] ←── (Residual Connection)
+  ↓
+[Multi-Head Cross-Attention] ←── From Encoder
+  ↓
+[Add & Norm] ←── (Residual Connection)
+  ↓
+[Feed Forward Network]
+  ↓
+[Add & Norm] ←── (Residual Connection)
+  ↓
+Output
+```
+
+### Key Components
+
+**1. Add & Norm:**
+```
+Output = LayerNorm(x + Sublayer(x))
+
+- Residual connection helps gradient flow
+- Layer normalization stabilizes training
+```
+
+**2. Feed Forward Network:**
+```
+FFN(x) = ReLU(x × W_1 + b_1) × W_2 + b_2
+
+Hidden dimension: 2048
+Output dimension: 512
+```
+
+**3. Masked Self-Attention:**
+- Prevents decoder from seeing future tokens
+- Uses mask to set future positions to -∞ before softmax
+
+```
+Mask for "I am happy":
+     I   am  happy
+I    ✓   ✗    ✗
+am   ✓   ✓    ✗
+happy ✓   ✓    ✓
+```
+
+---
+
+## Video 80-81: Transformer Training vs Inference
+
+### Training (Non-Autoregressive)
+```
+All outputs fed at once (with masking)!
+
+Input: "I love India"
+Output: "<start> मुझे भारत से प्यार है"
+
+All words processed in PARALLEL
+Mask ensures no "cheating" (can't see future)
+```
+
+### Inference (Autoregressive)
+```
+One word at a time!
+
+Step 1: Input → Encoder → Decoder("<start>") → "मुझे"
+Step 2: Input → Encoder → Decoder("<start> मुझे") → "भारत"
+Step 3: Input → Encoder → Decoder("<start> मुझे भारत") → "से"
+...
+Until <end> token generated
+```
+
+**Key Points:**
+1. Encoder runs ONCE (same output reused)
+2. Decoder runs multiple times (once per output word)
+3. Masking still applied during inference!
+4. Last position output used for next word prediction
+
+---
+
+## Video 82-83: Cross-Attention in Detail
+
+### What is Cross-Attention?
+Attention between **two different sequences**:
+- Query from Decoder
+- Key, Value from Encoder
+
+```
+Decoder: "मुझे" → Query
+Encoder: "I", "love", "India" → Keys, Values
+
+Q × K^T → Which input words are relevant for "मुझे"?
+Weights × V → Context vector for generating next word
+```
+
+### Cross-Attention vs Self-Attention
+| Self-Attention | Cross-Attention |
+|----------------|-----------------|
+| Q, K, V from same sequence | Q from decoder, K,V from encoder |
+| Understanding within sequence | Alignment between sequences |
+| Used in both Encoder & Decoder | Only in Decoder |
+
+### Applications of Cross-Attention
+1. Machine Translation (text → text)
+2. Image Captioning (image features → text)
+3. Text-to-Image (text → image features)
+4. Speech Recognition (audio → text)
+5. Question Answering (question, context → answer)
+
+---
+
+## Video 84: History of LLMs (LSTMs to ChatGPT)
+
+### Stage 1: Encoder-Decoder (2014)
+- **Paper:** "Sequence to Sequence Learning with Neural Networks"
+- **Authors:** Sutskever, Vinyals, Le (Google)
+- **Architecture:** LSTM-based Encoder-Decoder
+- **Problem:** Information bottleneck for long sequences
+
+### Stage 2: Attention Mechanism (2015)
+- **Paper:** "Neural Machine Translation by Jointly Learning to Align and Translate"
+- **Authors:** Bahdanau et al.
+- **Innovation:** Dynamic context vector per decoder step
+- **Problem:** Still sequential (slow training)
+
+### Stage 3: Transformers (2017)
+- **Paper:** "Attention is All You Need"
+- **Authors:** Vaswani et al. (Google)
+- **Innovation:** 
+  - Remove RNN/LSTM completely
+  - Self-Attention for parallel processing
+- **Impact:** Revolutionized NLP
+
+### Stage 4: Transfer Learning in NLP (2018)
+- **Paper:** "Universal Language Model Fine-tuning (ULMFiT)"
+- **Innovation:** Pre-train on language modeling, fine-tune for downstream tasks
+- **Key Insight:** Language modeling learns general language features
+
+### Stage 5: Large Language Models (2018+)
+- **BERT (Google):** Encoder-only Transformer
+- **GPT (OpenAI):** Decoder-only Transformer
+
+**GPT Evolution:**
+```
+GPT-1 (2018) → GPT-2 (2019) → GPT-3 (2020) → GPT-4 (2023)
+   117M          1.5B           175B          Trillion+ params
+```
+
+### What Makes an LLM "Large"?
+1. **Data:** Billions of words (45 TB for GPT-3)
+2. **Hardware:** Thousands of GPUs
+3. **Time:** Days to weeks of training
+4. **Cost:** Millions of dollars
+5. **Parameters:** Billions to trillions
+
+### GPT-3 to ChatGPT
+**Key Innovations:**
+1. **RLHF (Reinforcement Learning from Human Feedback)**
+   - Humans rank model responses
+   - Model learns from preferences
+   
+2. **Safety & Ethics**
+   - Filter harmful/inappropriate content
+   - Reduce bias
+
+3. **Contextual Understanding**
+   - Maintain conversation context
+   - Remember previous messages
+
+4. **Dialog-specific Training**
+   - Trained on conversational data
+   - Better at natural dialogue
+
+---
+
+## Section 9 Summary: Attention & Transformers
+
+| Video | Topic | Key Concept |
+|-------|-------|-------------|
+| 69-70 | Encoder-Decoder | LSTM-based Seq2Seq, context vector bottleneck |
+| 71-72 | Attention | Dynamic context, Bahdanau vs Luong |
+| 73-74 | Self-Attention | Contextual embeddings, QKV |
+| 75-76 | Multi-Head Attention | Multiple perspectives, parallel attention |
+| 77 | Positional Encoding | Sinusoidal encoding for order |
+| 78-79 | Transformer | Full architecture, encoder-decoder |
+| 80-81 | Training vs Inference | Parallel vs autoregressive |
+| 82-83 | Cross-Attention | Encoder-decoder alignment |
+| 84 | LLM History | Evolution from LSTM to ChatGPT |
+
+### Quick Reference
+```
+Attention Evolution:
+RNN → Encoder-Decoder → + Attention → Transformer → BERT/GPT → ChatGPT
+
+Key Formulas:
+- Attention(Q,K,V) = softmax(QK^T/√d_k) × V
+- MultiHead = Concat(heads) × W_o
+- PE(pos,2i) = sin(pos/10000^(2i/d))
+- PE(pos,2i+1) = cos(pos/10000^(2i/d))
+```
+
+---
+
+# Course Complete! 🎉
+
+## Key Takeaways from 100 Days of Deep Learning
+
+### Foundation (Section 1-4)
+- Perceptron → MLP → Deep Networks
+- Activation Functions, Loss Functions
+- Backpropagation, Gradient Descent
+- Regularization, Weight Initialization
+
+### Optimizers (Section 5)
+- SGD → Momentum → AdaGrad → RMSProp → Adam
+
+### CNNs (Section 6-7)
+- Convolution, Pooling, Feature Maps
+- LeNet-5, AlexNet, VGG, ResNet
+- Data Augmentation, Transfer Learning
+
+### RNNs (Section 8)
+- Sequential Data, Weight Sharing
+- LSTM (3 gates), GRU (2 gates)
+- Deep RNNs, Bidirectional RNNs
+
+### Transformers (Section 9)
+- Attention is All You Need
+- Self-Attention, Multi-Head Attention
+- Positional Encoding
+- BERT, GPT, ChatGPT
+
+---
+
+*Notes completed - 100 Days of Deep Learning by CampusX*
+
